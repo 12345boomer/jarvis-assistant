@@ -1,0 +1,216 @@
+# Jarvis behavior config. No secrets here (those go in .env).
+# Edited by hand; read by plugins/jarvis_guard and the jarvis package.
+
+timezone: America/New_York
+
+quiet_hours:
+  start: "23:00"
+  end: "07:00"
+  # During quiet hours nothing pings or calls Ben unless it matches an `urgent` rule.
+
+urgent:
+  # Senders whose time-sensitive emails may break quiet hours. Match on email or domain.
+  vip_senders:
+    - chris@example.com        # Chris
+    - eli@example.com      # Eli
+    - cheryl@example.com       # Cheryl
+    - "@example.com"           # a whole domain
+    # add more VIPs here
+  # Subject/body phrases that mark an email as time-sensitive (case-insensitive).
+  time_sensitive_phrases:
+    - "urgent"
+    - "asap"
+    - "today"
+    - "deadline"
+    - "wire"
+    - "signature needed"
+  # A meeting starting within this many minutes with an unresolved conflict is urgent.
+  meeting_conflict_window_minutes: 120
+
+# Google accounts Jarvis reads. Each one has its own token (~/.hermes/google_token[_<name>].json, same OAuth client
+# and scopes). Sign in a new one with: make google-auth ACCOUNT=<name> HINT=<email>, then make google-code ACCOUNT=<name> URL='...'.
+# OceanCrest (Microsoft 365) will plug in here later as a `provider: microsoft` entry; only `google` is read today.
+mail_accounts:
+  - { name: personal, label: personal, email: you@gmail.com, provider: google }
+  - { name: dailybuilt, label: DailyBuilt, email: you@yourbusiness.com, provider: google }
+
+# Weekday morning phone call with the brief (school, email that needs Ben, his day). jarvis/brief_call.py.
+# Runs as a Hermes cron job with no model wake (`make brief-call-install` reads time/days from here; re-run it after
+# changing them). `enabled: false` stops the call without touching the schedule.
+brief_call:
+  enabled: true
+  time: "09:00"
+  days: [mon, tue, wed, thu, fri]
+  max_words: 250
+  style: natural            # natural = spoken like a person (Sonnet 5.5 rewrites the facts, ~half a cent); list = the fixed template
+  fallback: telegram        # no answer, voicemail, busy, silent call, or failed call -> the same brief as text
+  max_late_minutes: 90      # Mac was asleep at 9:00 and the job runs late: past this, Telegram only, no call
+  email_lookback_days: 3
+  sales: true               # Sales section from Harvey's DB (read-only): businesses found + replies in 24 h, drafts pending_review
+  harvey_db: ~/Documents/harvey/data/harvey.db
+  max_emails: 5
+
+# Backup call when a Claude Code session has waited on Ben (permission prompt, question) and he hasn't answered the
+# phone push. Hooks in ~/.claude/settings.json record pending prompts; a 5-minute cron check calls. jarvis/cc_backup.py.
+cc_backup:
+  enabled: true
+  delay_minutes: 30
+  max_calls_per_day: 3      # past the cap, the alert goes to Telegram instead of a call
+  check_every_minutes: 5
+
+# What the HUD shows. No secrets, all free keyless sources.
+hud:
+  watchlist: [SPY, QQQ, BRK-B, AFRM, NVDA, AMZN, MSFT, AAPL, TSLA, AMD, BTC-USD]   # Yahoo Finance symbols; edit freely
+  location: { name: "New York, NY", lat: 40.71, lon: -74.01 }         # weather (Open-Meteo)
+  news_feeds:
+    - https://www.cnbc.com/id/100003114/device/rss/rss.html         # CNBC top news
+    - https://www.cnbc.com/id/10000664/device/rss/rss.html          # CNBC finance
+
+spend:
+  # Daily cap on model spend in USD. Alert on Telegram at `alert_fraction`, go read-only at 100%.
+  daily_cap_usd: 10.00
+  alert_fraction: 0.8
+  # Per-million-token prices used to estimate spend (input, output). Keep in sync with
+  # https://platform.claude.com/docs/en/about-claude/pricing
+  prices:
+    claude-sonnet-5-5: { input: 2.00, output: 10.00 }
+    claude-haiku-5-5: { input: 0.10, output: 0.50 }
+    claude-opus-5-5: { input: 4.00, output: 20.00 }
+
+# Permission tiers. Tool names are matched as glob patterns, first match wins, checked top to bottom.
+# tier 1 = just do it, tier 2 = ask Ben first, tier 3 = never (prepare only).
+permissions:
+  default_tier: 2            # anything unlisted is Tier 2
+  # Ben (2026-10-15): "whenever I tell Jarvis to do anything, it can do it." Tier 2 actions (send, book, text, post,
+  # share) run without an approval prompt when Ben is in the conversation (Telegram, HUD, phone, API). Cron and other
+  # unattended runs still ask, which Hermes denies, so nothing Ben didn't ask for goes out on its own. Tier 3 is unchanged.
+  tier2_mode: "do"           # "do" = act when asked in a conversation; "ask" = approval button every time
+
+  # The hidden Jarvis Browser (browser_* tools) may only open these sites (and their subdomains): the ones Ben signed
+  # in to there. Anything else is blocked and Jarvis is told to use `jarvis mac open <url>` (a tab in Ben's own Chrome)
+  # or web_extract. Ben, 2026-11-06: things kept opening where he couldn't see them.
+  hidden_browser_hosts: ["uconn.edu"]
+
+  # Exact tool name -> tier. Wins over every pattern below. Use this to fix a misclassification.
+  overrides: {}
+
+  # Shell commands that permanently destroy data are never run (regex, case-insensitive).
+  tier3_terminal_patterns:
+    - "(google_api\\.py|\\$GAPI|/gapi)\\b.*\\bdelete\\b.*--permanent"
+    - "\\brm\\s+-[a-z]*r[a-z]*f?\\s+(/|~)"
+
+  # Explicitly safe shell commands (checked before the tier-2 patterns below).
+  tier1_terminal_patterns:
+    - "^\\s*open\\s+(-a\\s+|https?://|mailto:)"                       # open an app or a URL
+    - "\\bjarvis\\s+mac\\s+(wake-screen|open|volume|notify|lock|brief|contact)\\b"
+    - "^\\s*osascript\\s+-e\\s+['\"]?(tell application \\\"[^\\\"]+\\\" to activate|set volume|display notification)"
+    - "^\\s*osascript\\s+-e\\s+['\"]?tell application \\\"(Contacts|System Events|Finder|Calendar|Reminders|Notes|Music|Spotify)\\\" to (get|count|return|exists)\\b"   # AppleScript reads
+    - "^\\s*caffeinate\\b"
+    - "^\\s*pmset\\s+(-g|displaysleepnow)\\b"
+    - "\\bhermes\\s+send\\s+(-t|--to)\\s+telegram(\\s|$)"             # message/attach a file to Ben's own Telegram
+    - "(google_api\\.py|\\$GAPI|/gapi)\\s+drive\\s+upload\\b"             # upload to Ben's own Drive (not shared)
+    - "/jarvis-deck/scripts/deck\\s+(build|example)\\b"                 # build a .pptx locally
+    - "\\bjarvis\\s+school\\s+(due|status|setup|api|open)\\b"          # HuskyCT reads via feed / logged-in browser
+    - "\\bjarvis\\s+browser\\s+(start|status|open)\\b"
+    - "\\bjarvis\\s+hq\\s+ask\\b"                                    # ask Jessica; read-only by design (jarvis/hq.py)
+
+  # Shell commands that can send, change, or publish something ask first (regex, case-insensitive).
+  tier2_terminal_patterns:
+    # Google skill (skills/google): anything that isn't a read.
+    - "(google_api\\.py|\\$GAPI|/gapi)\\b.*\\b(send|reply|modify|create|create-folder|upload|share|delete|update|append)\\b"
+    - "\\bjarvis\\s+call\\b.*--to\\b"          # calling anyone other than Ben asks first
+    - "\\bjarvis\\s+mac\\s+text\\b"               # iMessage/SMS to anyone asks first
+    - "\\bcurl\\b.*(-d\\b|--data|-X\\s*POST|-F\\b|--form)"
+    # mail-sending binaries only when they're the command itself (not the word "mail" inside a Gmail query)
+    - "(^|[;&|\\n]\\s*|\\bsudo\\s+)(sendmail|mailx|mutt|msmtp|mail)\\s+(-|\\S+@)"
+    - "\\bosascript\\b"
+    - "\\bgit\\s+push\\b"
+    - "\\bgh\\s+(pr|issue|release)\\s+(create|comment|edit)\\b"
+
+  tier3_never:
+    # Money, payments, permanent deletion, credentials.
+    - "*pay*"
+    - "*payment*"
+    - "*transfer*"
+    - "*wire*"
+    - "*delete*"
+    - "*permanently*"
+    - "*trash*"
+    - "*purge*"
+    - "*password*"
+    - "*credential*"
+    - "*card*"
+
+  tier2_ask:
+    - "*send*"
+    - "*reply*"
+    - "*forward*"
+    - "*create_event*"
+    - "*update_event*"
+    - "*modify*"
+    - "*share*"
+    - "post_*"
+    - "*publish*"
+    - "*invoice*"
+    - "call_*"
+    - "*_call"
+    - "phone_*"
+    - "*upload*"
+
+  tier1_do:
+    - "*search*"
+    - "*list*"
+    - "*get*"
+    - "*read*"
+    - "*fetch*"
+    - "*draft*"
+    - "*summar*"
+    - "web_*"
+    - "browser_*"
+    - "memory*"
+    - "skill*"
+    - "session_search"
+    - "todo*"
+    - "clarify"
+    - "honcho_*"
+    - "terminal"          # Hermes's own dangerous-command gate still applies (rm -rf, sudo, curl|sh ...)
+    - "process_manage"
+    - "write_file"        # writes are confined to the workspace by Hermes
+    - "patch"
+    - "execute_code"
+    - "vision_analyze"
+    - "image_gen*"
+    - "tts*"
+    - "cronjob*"
+    - "delegate*"
+    - "tool_describe"     # Hermes meta-tools: looking up what a tool does is not an action
+    - "tool_search"
+    - "tools_*"
+    - "computer_use"      # act freely on the Mac (Ben's choice); arg_rules + the skill's confirm-before-send rule gate the risky clicks
+    - "browser_exec"
+
+  # Per-tool argument rules: regex over the JSON of the tool's arguments. First match wins.
+  # Computer use is Tier 1 by default (Ben's choice); these catch the dangerous keystrokes.
+  arg_rules:
+    - name: typed-secret
+      tools: ["computer_use", "browser_*"]
+      tier: 3
+      # (a) a typed token >=12 chars with no spaces mixing letters and digits (password-shaped),
+      # (b) a 13-19 digit run (card number), (c) a password/cvv/ssn field selector or arg key.
+      pattern: "\"text\"\\s*:\\s*\"(?=[^\"\\s]*\\d)(?=[^\"\\s]*[A-Za-z])[^\"\\s]{12,}\"|\\b(?:\\d[ -]?){13,19}\\b|(#|name=|type=|\\[|id=)['\\\"]?(password|passcode|passwd|cvv|ssn)\\b|\"(password|passcode|cvv|ssn)\"\\s*:"
+      reason: "typing what looks like a password, card number, or into a password/CVV/SSN field"
+    - name: purchase-or-send-keystroke
+      tools: ["computer_use", "browser_*"]
+      tier: 2
+      pattern: "(place order|buy now|pay now|checkout|confirm purchase|submit payment|send money|transfer|delete account|unsubscribe)"
+      reason: "keystroke that would buy, pay, send, or delete"
+
+  # Argument-level checks on top of tool tier. If any arg key matches, bump to tier 3.
+  tier3_arg_keys:
+    - password
+    - passwd
+    - card_number
+    - cvv
+    - ssn
+    - routing_number
+    - account_number

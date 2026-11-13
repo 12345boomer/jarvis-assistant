@@ -1,0 +1,14 @@
+name: jarvis-guard
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+license: MIT
+description: "Jarvis permission tiers (do / ask / never), audit log, and daily spend cap. Logic lives in the jarvis package in the repo; this plugin only wires the hooks."
+tags: [security, audit, jarvis]
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+  - transform_tool_result
+  - post_approval_response
+  - post_api_request
+  - pre_llm_call

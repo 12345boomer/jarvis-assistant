@@ -1,0 +1,33 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+secrets/
+google_client_secret*.json
+token*.json
+
+# Runtime data (audit log, approvals, caches)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Machine-specific marker written by make link
+plugins/jarvis_guard/.repo_root
+
+# Logs
+logs/
+*.log

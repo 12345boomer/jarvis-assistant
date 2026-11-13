@@ -1,0 +1,156 @@
+# Hermes Agent config for Jarvis. Symlinked to ~/.hermes/config.yaml by `make link`.
+# Secrets never go here; they live in .env (also symlinked into ~/.hermes/.env).
+# Full annotated reference: ~/.hermes/hermes-agent/cli-config.yaml.example
+# Hermes manages this version marker; leave it alone.
+_config_version: 50
+
+# ---------------------------------------------------------------------------
+# Brain. Swap models by changing these two lines (provider + model id).
+#   anthropic     -> ANTHROPIC_API_KEY        model: claude-sonnet-5-5 / claude-opus-5-5 / claude-haiku-5-5
+#   openai-codex  -> hermes auth add openai-codex
+#   gemini        -> GOOGLE_API_KEY           model: gemini-2.5-pro
+#   openrouter    -> OPENROUTER_API_KEY       model: anthropic/claude-sonnet-5-5
+# ---------------------------------------------------------------------------
+model:
+  provider: "anthropic"
+  default: "claude-sonnet-5-5"
+
+# Cheap, fast model for side tasks (summaries, titles, compression, page extraction).
+auxiliary:
+  compression: {provider: "anthropic", model: "claude-haiku-5-5"}
+  title_generation: {provider: "anthropic", model: "claude-haiku-5-5"}
+  web_extract: {provider: "anthropic", model: "claude-haiku-5-5"}
+  vision: {provider: "anthropic", model: "claude-haiku-5-5"}
+  session_search: {provider: "anthropic", model: "claude-haiku-5-5"}
+  background_review: {enabled: false}
+
+agent:
+  max_turns: 60
+  reasoning_effort: "medium"
+  verbose: false
+
+# ---------------------------------------------------------------------------
+# Permissions. Tier logic lives in plugins/jarvis_guard (config/jarvis.yaml).
+# Hermes's own dangerous-command gate is a second layer underneath it.
+# ---------------------------------------------------------------------------
+plugins:
+  enabled: [jarvis-guard]
+  hook_callback_timeout: 10
+
+approvals:
+  mode: manual            # every dangerous shell command asks Ben; no LLM auto-approve
+  timeout: 300            # seconds; no answer = denied
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+  deny:                   # hard blocks, enforced even in yolo mode (Tier 3 mirror)
+    - "rm -rf /*"
+    - "rm -rf ~*"
+    - "*curl*|*sh*"
+    - "*wget*|*sh*"
+    - "dd if=* of=/dev/*"
+    - "*mkfs*"
+    - "git push --force*"
+    - "*security find-generic-password*"
+    - "*cat*.env*"
+    - "*defaults write com.apple*"
+
+  destructive_slash_confirm: false
+security:
+  protected_instruction_files: true   # agent edits to SOUL.md/AGENTS.md always ask
+
+# ---------------------------------------------------------------------------
+# Memory. Built-in MEMORY.md/USER.md stay on; Honcho (Phase 2) adds long-term
+# user modeling. Honcho settings: config/honcho.json; key: HONCHO_API_KEY in .env.
+# ---------------------------------------------------------------------------
+memory:
+  provider: honcho
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 2200
+  user_char_limit: 1375
+  nudge_interval: 10
+  write_approval: false
+
+skills:
+  creation_nudge_interval: 0      # Jarvis doesn't invent skills on its own; we write them
+  write_approval: true
+
+# ---------------------------------------------------------------------------
+# Channels. Telegram allowlist comes from .env (TELEGRAM_ALLOWED_USERS).
+# ---------------------------------------------------------------------------
+# Hermes's browser tool drives the Jarvis Browser (dedicated Chrome, scripts/install_browser.sh) over CDP, so sites
+# Ben signed in to there (HuskyCT, ...) stay signed in for the agent. Never his default Chrome profile.
+browser:
+  cdp_url: "http://127.0.0.1:9333"
+
+platform_toolsets:
+  # No tts: Ben wants Telegram replies as text only (2026-10-25).
+  telegram: [web, file, terminal, vision, browser, computer_use, skills, todo, cronjob, memory, clarify, session_search]
+
+platforms:
+  # Hermes auto-detects Twilio creds in .env and tries to start its SMS platform; we don't use SMS
+  # (US A2P registration needed, and calls cover the urgent path). Keep it off.
+  sms:
+    enabled: false
+  # OpenAI-compatible API server on 127.0.0.1:8642 (enabled + keyed via .env API_SERVER_*).
+  # ElevenLabs's voice agent calls this as its "Custom LLM" through a Tailscale Funnel.
+  api_server:
+    enabled: true
+    extra:
+      model_routes:
+        jarvis-voice:                   # ElevenLabs sends model="jarvis-voice" -> fast model for low latency
+          model: "claude-haiku-5-5"
+          provider: "anthropic"
+        jarvis-task:                    # background jobs started from a call (decks, documents, research). Sonnet: one Opus deck
+          model: "claude-sonnet-5-5"     # cost ~$5 (36 tool calls); the quality comes from the skill + template + render check
+          provider: "anthropic"
+  telegram:
+    reply_to_mode: "first"
+    guest_mode: false
+    extra:
+      drop_pending_on_cold_boot: true
+      disable_link_previews: true
+
+    enabled: true
+    home_channel:          # written by /sethome in Telegram; where cron results and alerts are delivered
+      platform: telegram
+      chat_id: ''          # your Telegram chat ID (set by /sethome)
+      name: ''
+      user_id: ''
+
+# Voice notes in -> local Whisper (free, no key). Replies out -> Edge TTS (free) until Phase 5 swaps in ElevenLabs.
+stt:
+  enabled: true
+  provider: "local"
+  language: "en"
+  local:
+    model: "base"
+
+tts:
+  # "edge" (free): Telegram is text-only by Ben's choice, so nothing in Hermes spends ElevenLabs credits; those are kept
+  # for phone calls. The elevenlabs block below stays for reference.
+  provider: "edge"
+  speed: 1.0
+  edge:
+    voice: "en-GB-RyanNeural"
+  elevenlabs:
+    voice_id: "sIivXWc5MTlPIP3kJXhg"  # Hayes M (Edward failed on phone/WebRTC calls 2026-10-27); keep in sync with ELEVENLABS_VOICE_ID in .env
+    model_id: "eleven_flash_v2_5"     # cheapest good model for short replies (~75 ms, half-price credits)
+
+cron:
+  catch_up_missed: true
+  wrap_response: false      # deliver the brief/alert text as-is, no job header/footer
+
+gateway:
+  platforms:
+    api_server:
+      tool_progress_events: false    # plain OpenAI SSE only; ElevenLabs's parser must not see named events
+
+display:
+  tool_progress: "verbose"
+
+telemetry:
+  enabled: false
+command_allowlist:
+  - plugin_rule:jarvis:terminal:(google_api\.py|\$GAPI|/gapi)\b.*\b(send|reply|modify|create|create-folder|upload|share|delete|update|append)\b

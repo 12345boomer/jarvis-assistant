@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# gapi: run google_api.py with the Hermes venv Python (the one that has the Google client libs).
+# Usage: gapi gmail search "is:unread" --max 10
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+PY=""
+for cand in "$HERMES_HOME"/installs/*/environments/*/venv/bin/python; do
+  if [ -x "$cand" ] && "$cand" -c "import googleapiclient" 2>/dev/null; then PY="$cand"; break; fi
+done
+if [ -z "$PY" ]; then
+  echo "gapi: no Hermes Python with Google libs found. Run: hermes pm install --extra google" >&2
+  exit 2
+fi
+exec "$PY" "$HERE/google_api.py" "$@"

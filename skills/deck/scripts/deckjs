@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# deckjs DECK.js  -> runs a pptxgenjs deck script with Jarvis's node + packages (pptxgenjs, sharp, react-icons).
+set -euo pipefail
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+export PATH="$HERMES_HOME/tools/node-26.7.0-darwin-arm64/bin:/opt/homebrew/bin:$PATH"
+export NODE_PATH="$HERMES_HOME/jarvis-deck/node/node_modules"
+exec node "$@"

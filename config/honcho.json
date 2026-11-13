@@ -1,0 +1,22 @@
+{
+  "environment": "production",
+  "workspace": "jarvis",
+  "peerName": "ben",
+  "aiPeer": "jarvis",
+  "pinUserPeer": true,
+  "sessionStrategy": "global",
+  "recallMode": "hybrid",
+  "contextCadence": 1,
+  "dialecticCadence": 3,
+  "dialecticDepth": 1,
+  "dialecticReasoningLevel": "low",
+  "dialecticDynamic": true,
+  "dialecticMaxChars": 800,
+  "contextTokens": 1500,
+  "writeFrequency": "async",
+  "saveMessages": true,
+  "initOnSessionStart": false,
+  "timeout": 15,
+  "observationMode": "directional",
+  "a2aSessions": false
+}

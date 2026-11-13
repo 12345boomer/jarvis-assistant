@@ -1,0 +1,27 @@
+{
+  "_comment": "Invoice settings for the jarvis-invoice skill. Ben maintains this. Jarvis refuses to render an invoice for a business whose payment.details is empty.",
+  "default_due_days": 14,
+  "businesses": {
+    "dailybuilt": {
+      "name": "DailyBuilt",
+      "email": "",
+      "address_lines": [],
+      "tax_rate": 0,
+      "payment": { "method": "", "details": "", "terms": "Net 14" }
+    },
+    "oceancrest": {
+      "name": "OceanCrest AI",
+      "email": "you@yourcompany.com",
+      "address_lines": [],
+      "tax_rate": 0,
+      "payment": { "method": "", "details": "", "terms": "Net 14" }
+    },
+    "personal": {
+      "name": "Ben Eydlin",
+      "email": "you@gmail.com",
+      "address_lines": [],
+      "tax_rate": 0,
+      "payment": { "method": "", "details": "", "terms": "Due on receipt" }
+    }
+  }
+}

@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05080f; --panel:rgba(0,212,255,.04); --line:rgba(0,212,255,.22); --line-soft:rgba(0,212,255,.10);
+    --cyan:#00d4ff; --cyan-dim:rgba(0,212,255,.55); --ice:#c0e8ff; --white:#eef8ff; --amber:#ffb347; --red:#ff5a5a; --green:#4ade80; --violet:#c084fc;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace; --sans:"Rajdhani",-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{height:100%;margin:0;background:var(--bg);color:var(--ice);font:15px/1.4 var(--sans);overflow:hidden}
+  a{color:inherit;text-decoration:none}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(0,212,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.04) 1px,transparent 1px);
+    background-size:64px 64px;animation:drift 90s linear infinite}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:60;background:repeating-linear-gradient(0deg,rgba(0,0,0,.13) 0 1px,transparent 1px 3px)}
+  @keyframes drift{to{background-position:64px 64px,64px 64px}}
+  .lbl{font:600 11px var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--cyan-dim)}
+  .mono{font-family:var(--mono)}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2a3a4a;flex:none}
+  .dot.ok{background:var(--green);box-shadow:0 0 8px var(--green)} .dot.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)} .dot.bad{background:var(--red)}
+
+  /* header */
+  header{position:relative;z-index:2;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:22px;padding:10px 22px;border-bottom:1px solid var(--line-soft)}
+  .brand{font:700 20px var(--sans);letter-spacing:.42em;color:var(--cyan);text-shadow:0 0 14px rgba(0,212,255,.5)}
+  .chips{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .chip{display:flex;align-items:center;gap:9px;border:1px solid var(--line-soft);padding:5px 12px;font:500 14px var(--sans);letter-spacing:.04em;color:var(--white)}
+  .chip .lbl{font-size:10px} .chip b{font:600 15px var(--mono);color:var(--white)}
+  .chip.next b{color:var(--amber)} .chip.hidden{display:none}
+  .clock{text-align:right} .clock .t{font:600 26px var(--mono);color:var(--white);letter-spacing:.04em;line-height:1}
+  .clock .d{font:600 11px var(--sans);letter-spacing:.24em;color:var(--cyan-dim);margin-top:3px}
+
+  /* layout */
+  main{position:relative;z-index:2;display:grid;grid-template-columns:360px 1fr 380px;gap:14px;padding:14px 22px 8px;height:calc(100% - 62px - 44px)}
+  .col{display:flex;flex-direction:column;gap:14px;min-height:0}
+  .panel{position:relative;background:var(--panel);border:1px solid var(--line);padding:12px 16px;min-height:0;display:flex;flex-direction:column;transform:translate(var(--px,0),var(--py,0));transition:transform .25s ease-out}
+  .panel::before,.panel::after{content:"";position:absolute;width:12px;height:12px;border-color:var(--cyan);border-style:solid;opacity:.9}
+  .panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px} .panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+  .panel h2{margin:0 0 8px;font:600 11px var(--sans);letter-spacing:.26em;text-transform:uppercase;color:var(--cyan-dim);display:flex;justify-content:space-between;align-items:baseline}
+  .panel h2 span{letter-spacing:.08em;font-family:var(--mono);font-weight:500}
+  .grow{flex:1;min-height:0;overflow:auto} .grow::-webkit-scrollbar{width:4px} .grow::-webkit-scrollbar-thumb{background:var(--line)}
+  .due{display:grid;grid-template-columns:74px 1fr auto;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);align-items:baseline}
+  .due .c{font:600 11px var(--mono);color:var(--cyan-dim);letter-spacing:.06em} .due .s{font:500 15px var(--sans);color:var(--white)} .due .w{font:500 12px var(--mono);color:var(--cyan-dim);white-space:nowrap}
+  .due.today .w,.due.overdue .w{color:var(--amber)} .due.overdue .s{color:var(--red)}
+  .transcript{display:none;margin-top:10px;max-width:620px;text-align:left;font:15px var(--sans);line-height:1.35}
+  body.oncall .transcript{display:block} .transcript div{padding:4px 0;border-bottom:1px solid var(--line-soft);color:var(--white)} .transcript div.you{color:var(--cyan-dim)} .transcript b{font-weight:600;color:var(--cyan-dim);font-size:11px;letter-spacing:.14em;margin-right:8px}
+  body.oncall #mode{color:var(--amber)} body.oncall .core{cursor:default}
+  .empty{color:var(--cyan-dim);font:14px var(--sans);letter-spacing:.06em;padding:6px 0}
+
+  /* today */
+  .ev{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-soft);align-items:start}
+  .ev .t{font:500 13px var(--mono);color:var(--cyan-dim);white-space:nowrap} .ev .s{font:600 16px var(--sans);color:var(--white);line-height:1.2}
+  .ev .m{font:12px var(--mono);color:var(--cyan-dim)} .ev.past{opacity:.38} .ev.live .s{color:var(--amber)} .ev.live .t{color:var(--amber)}
+  .ev.next .s::after{content:" · next";font:600 10px var(--sans);letter-spacing:.2em;color:var(--amber);text-transform:uppercase}
+
+  /* inbox */
+  .mail{display:block;padding:7px 0;border-bottom:1px solid var(--line-soft)}
+  .mail .f{display:flex;justify-content:space-between;gap:8px;font:600 14px var(--sans);color:var(--white)} .mail .f small{font:11px var(--mono);color:var(--cyan-dim);font-weight:400}
+  .mail .s{font:500 14px var(--sans);color:var(--ice);white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .mail .p{font:12px var(--sans);color:var(--cyan-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mail.vip .f::before{content:"VIP";font:700 9px var(--sans);letter-spacing:.2em;color:#05080f;background:var(--amber);padding:2px 5px;margin-right:6px;align-self:center}
+
+  /* reactor */
+  .reactor{align-items:center;text-align:center;flex:none;padding:8px 16px 10px}
+  .core{position:relative;width:270px;height:270px;cursor:pointer;user-select:none}
+  .core svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .ring{transform-box:fill-box;transform-origin:center;fill:none}
+  .r-ticks{stroke:var(--cyan);opacity:.35;stroke-width:1;stroke-dasharray:1 6.6}
+  .r-seg{stroke:var(--cyan);opacity:.75;stroke-width:3;stroke-dasharray:38 22;animation:spin 48s linear infinite}
+  .r-seg2{stroke:var(--cyan);opacity:.45;stroke-width:1.5;stroke-dasharray:6 10 2 10;animation:spin 72s linear infinite reverse}
+  .r-sweep{stroke:var(--amber);opacity:0;stroke-width:2;stroke-dasharray:60 900;animation:spin 1.6s linear infinite}
+  .core.connecting .r-sweep,.core.thinking .r-sweep,.core.busy .r-sweep{opacity:.9}
+  .glow{fill:url(#g);opacity:.9} .heart{fill:var(--white);filter:drop-shadow(0 0 10px var(--cyan)) drop-shadow(0 0 26px rgba(0,212,255,.6));transform-box:fill-box;transform-origin:center}
+  .core.listening .heart{animation:pulse 2.2s ease-in-out infinite} .core.speaking .heart{filter:drop-shadow(0 0 16px #fff) drop-shadow(0 0 40px var(--cyan))}
+  .bars rect{fill:var(--cyan);opacity:.85}
+  @keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .mode{margin-top:6px;font:700 12px var(--sans);letter-spacing:.32em;text-transform:uppercase;color:var(--cyan)}
+  .caption{margin-top:4px;min-height:40px;font:16px var(--sans);color:var(--white);max-width:560px;line-height:1.3} .caption .you{color:var(--cyan-dim)}
+  .now{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:4px;font:500 13px var(--mono);color:var(--cyan-dim);max-width:600px}
+  .now.busy{color:var(--amber)} .now .dot{animation:blink 1.2s ease-in-out infinite} @keyframes blink{50%{opacity:.2}}
+
+  /* tasks */
+  .task{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font:500 16px var(--sans);color:var(--white)}
+  .task input[type=checkbox]{appearance:none;width:16px;height:16px;border:1px solid var(--cyan);background:transparent;cursor:pointer;flex:none}
+  .task input[type=checkbox]:checked{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .task small{margin-left:auto;font:11px var(--mono);color:var(--cyan-dim)}
+  .addtask{display:flex;gap:8px;margin-top:8px} .addtask input{flex:1;background:transparent;border:1px solid var(--line);color:var(--white);font:500 15px var(--sans);padding:7px 10px;outline:none}
+  .addtask input:focus{border-color:var(--cyan)} .addtask button{border:1px solid var(--cyan);background:transparent;color:var(--cyan);font:600 12px var(--sans);letter-spacing:.2em;padding:0 12px;cursor:pointer}
+
+  /* markets */
+  .q{display:grid;grid-template-columns:80px 1fr 86px 70px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+  .q .sym{font:600 15px var(--sans);color:var(--white);letter-spacing:.06em} .q .sym small{display:block;font:11px var(--sans);color:var(--cyan-dim);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78px}
+  .q svg{width:100%;height:28px} .q .px{font:600 15px var(--mono);color:var(--white);text-align:right;transition:color .3s} .q .chg{font:600 13px var(--mono);text-align:right}
+  .up{color:var(--green)} .down{color:var(--red)} .flash{color:var(--amber)!important}
+
+  /* news */
+  .nw{display:block;padding:6px 0;border-bottom:1px solid var(--line-soft)} .nw .h{font:500 14.5px var(--sans);color:var(--white);line-height:1.25} .nw .src{font:11px var(--mono);color:var(--cyan-dim);letter-spacing:.06em}
+
+  /* footer: ticker + status */
+  footer{position:relative;z-index:2;height:44px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:20px;padding:0 22px;border-top:1px solid var(--line-soft);overflow:hidden}
+  .tape{overflow:hidden;white-space:nowrap;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+  .tape div{display:inline-block;animation:tape 60s linear infinite;padding-right:60px} .tape span{font:600 14px var(--mono);color:var(--white);margin-right:34px}
+  .tape span i{font-style:normal;color:var(--cyan-dim);margin-right:8px;letter-spacing:.06em}
+  @keyframes tape{to{transform:translateX(-50%)}}
+  .mini{display:flex;gap:16px;font:500 12px var(--mono);color:var(--cyan-dim);white-space:nowrap} .mini b{color:var(--white);font-weight:500} .mini a{cursor:pointer;color:var(--cyan)}
+
+  /* ops drawer */
+  #ops{position:fixed;inset:62px 0 44px 0;z-index:40;background:rgba(5,8,15,.94);backdrop-filter:blur(6px);display:none;grid-template-columns:1fr 1fr 1fr;gap:14px;padding:14px 22px}
+  #ops.open{display:grid}
+  .row{display:grid;grid-template-columns:46px 30px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font:12.5px var(--mono);align-items:start}
+  .row .t{color:var(--cyan-dim)} .T1{color:var(--green)} .T2{color:var(--violet)} .T3{color:var(--red)} .EV{color:var(--cyan)}
+  .row .tool{color:var(--white)} .row .args{color:var(--cyan-dim);white-space:pre-wrap;word-break:break-word;font-size:11.5px}
+  .card{border:1px solid var(--line);border-left:2px solid var(--violet);padding:8px 10px;margin-bottom:8px;font:14px var(--sans);background:rgba(192,132,252,.05)}
+  .card.decided{border-left-color:var(--line);background:transparent;opacity:.7} .card .meta{font:11px var(--mono);color:var(--cyan-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table{width:100%;border-collapse:collapse;font:12px var(--mono)} th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+  th{color:var(--cyan-dim);font-weight:500;letter-spacing:.12em;text-transform:uppercase;font-size:10px}
+  .svc{display:flex;flex-direction:column;gap:5px} .svc div{display:flex;align-items:center;gap:8px;font:500 13px var(--mono);color:var(--white)} .svc div b{color:var(--cyan-dim);font:600 11px var(--sans);letter-spacing:.16em;text-transform:uppercase;flex:1}
+
+  /* brief overlay */
+  #brief{position:fixed;inset:62px 0 44px 0;z-index:41;background:rgba(5,8,15,.96);backdrop-filter:blur(6px);display:none;padding:26px 48px;overflow:auto}
+  #brief.open{display:block}
+  #brief h1{font:600 22px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin:0 0 18px}
+  #brief .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 36px}
+  #brief h2{font:600 11px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--cyan-dim);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line-soft)}
+  #brief li{list-style:none;font:500 17px var(--sans);color:var(--white);padding:5px 0;border-bottom:1px solid var(--line-soft)}
+  #brief .hint{margin-top:22px;font:11px var(--mono);color:var(--cyan-dim);letter-spacing:.08em}
+  .chip.btn{cursor:pointer} .chip.btn:hover{border-color:var(--cyan)}
+  #boot{position:fixed;inset:0;z-index:99;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;transition:opacity .5s}
+  #boot .brand{font-size:32px} #boot .line{width:240px;height:1px;background:var(--line);overflow:hidden} #boot .line i{display:block;height:100%;width:40%;background:var(--cyan);animation:sweep 1s linear}
+  @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(260%)}} #boot.done{opacity:0;pointer-events:none}
+  @media (max-width:1180px){html,body{overflow:auto}main{grid-template-columns:1fr;height:auto}header{grid-template-columns:1fr}.clock{text-align:left}}
+</style>
+</head>
+<body>
+<div id="boot"><span class="brand">JARVIS</span><div class="line"><i></i></div><span class="lbl" id="bootmsg">initialising</span></div>
+
+<header>
+  <span class="brand">JARVIS</span>
+  <div class="chips">
+    <div class="chip" id="wx"><span class="lbl">weather</span><b>--°</b><span id="wxd">…</span></div>
+    <div class="chip next hidden" id="nextChip"><span class="lbl">next</span><b id="nextIn">--</b><span id="nextName"></span></div>
+    <div class="chip hidden" id="inboxChip"><span class="lbl">inbox</span><b id="inboxN">0</b><span id="inboxVip"></span></div>
+    <div class="chip hidden" id="qhChip"><span class="dot warn"></span><span class="lbl">quiet hours</span></div>
+    <div class="chip hidden" id="apChip"><span class="dot warn"></span><span class="lbl">approval waiting</span></div>
+    <div class="chip btn" id="briefBtn" title="your brief (B)"><span class="lbl">brief</span><b>▸</b></div>
+  </div>
+  <div class="clock"><div class="t" id="clock">--:--:--</div><div class="d" id="date"></div></div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel" style="flex:1.1">
+      <h2>Today <span id="todayDate"></span></h2>
+      <div class="grow" id="today"><div class="empty">Loading calendar…</div></div>
+    </section>
+    <section class="panel" style="flex:1">
+      <h2>Needs you <span id="inboxMeta"></span></h2>
+      <div class="grow" id="inbox"><div class="empty">Loading mail…</div></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel reactor">
+      <div class="core idle" id="core" title="Click to talk">
+        <svg viewBox="0 0 270 270">
+          <defs><radialGradient id="g"><stop offset="0" stop-color="#9ff3ff" stop-opacity=".95"/><stop offset=".45" stop-color="#00d4ff" stop-opacity=".35"/><stop offset="1" stop-color="#00d4ff" stop-opacity="0"/></radialGradient></defs>
+          <circle class="ring r-ticks" cx="135" cy="135" r="127"/>
+          <circle class="ring r-seg"   cx="135" cy="135" r="112"/>
+          <circle class="ring r-seg2"  cx="135" cy="135" r="96"/>
+          <circle class="ring r-sweep" cx="135" cy="135" r="120"/>
+          <g class="bars" id="bars"></g>
+          <circle class="glow" cx="135" cy="135" r="62"/>
+          <circle class="heart" cx="135" cy="135" r="21"/>
+        </svg>
+      </div>
+      <div class="mode" id="mode">standby</div>
+      <div class="caption" id="caption"></div>
+      <div class="transcript" id="transcript"></div>
+      <div class="now" id="now"><span class="dot ok"></span><span id="nowText">standing by</span></div>
+    </section>
+    <section class="panel" style="flex:1">
+      <h2>Tasks <span id="taskN"></span></h2>
+      <div class="grow" id="tasks"><div class="empty">Nothing on the list.</div></div>
+      <form class="addtask" id="addtask"><input id="taskText" placeholder="add a task… (or tell Jarvis)" autocomplete="off"><button type="submit">ADD</button></form>
+    </section>
+    <section class="panel" style="flex:.9">
+      <h2>Due · HuskyCT <span id="dueN"></span></h2>
+      <div class="grow" id="due"><div class="empty">connecting…</div></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel" style="flex:1.15">
+      <h2>Markets <span id="mktAsof"></span></h2>
+      <div class="grow" id="markets"><div class="empty">Loading quotes…</div></div>
+    </section>
+    <section class="panel" style="flex:1">
+      <h2>Headlines <span>cnbc</span></h2>
+      <div class="grow" id="news"><div class="empty">Loading…</div></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="tape"><div id="tape"></div></div>
+  <div class="mini"><span>systems <b id="sysN">-/6</b></span><span>spend <b id="spendMini">$0.00</b></span><span>gateway <span class="dot" id="gwDot"></span></span><a id="opsBtn" title="activity · approvals · audit (O)">ops</a></div>
+</footer>
+
+<div id="brief"><h1>Brief</h1><div class="cols" id="briefCols"></div><div class="hint">B or Esc to close · say "give me my brief" on a call to hear it</div></div>
+
+<div id="ops">
+  <section class="panel"><h2>Activity <span id="feedCount"></span></h2><div class="grow" id="feed"></div></section>
+  <section class="panel"><h2>Approvals <span><a href="https://t.me/your_jarvis_bot" target="_blank" style="color:var(--cyan)">telegram ↗</a></span></h2><div class="grow"><div id="pending"></div><div id="decided"></div></div></section>
+  <section class="panel"><h2>Systems · Audit <span><a href="/api/audit?limit=500" target="_blank" style="color:var(--cyan)">json ↗</a></span></h2><div class="svc" id="tiles" style="margin-bottom:10px"></div><div class="grow"><table id="audit"><thead><tr><th>time</th><th>tier</th><th>tool</th><th>decision</th></tr></thead><tbody></tbody></table></div></section>
+</div>
+
+<script src="https://unpkg.com/@elevenlabs/client@1.27.0/dist/lib.iife.js" defer></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hm = iso => { try { return new Date(iso).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}).replace(' ', '').toLowerCase(); } catch { return iso; } };
+const hm24 = iso => { try { return new Date(iso).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}); } catch { return iso; } };
+const j = u => fetch(u).then(r => r.json());
+const post = (u, body) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {})});
+
+/* ---------- clock + countdown ---------- */
+let nextEvent = null;
+setInterval(() => {
+  const d = new Date();
+  $('#clock').textContent = d.toLocaleTimeString([], {hour12:false});
+  $('#date').textContent = d.toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'}).toUpperCase();
+  if (nextEvent) {
+    const ms = new Date(nextEvent.start) - d;
+    if (ms < 0) { nextEvent = null; $('#nextChip').classList.add('hidden'); return; }
+    const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+    $('#nextIn').textContent = h ? `${h}h ${m % 60}m` : m ? `${m}m ${Math.floor(ms / 1000) % 60}s` : `${Math.floor(ms / 1000)}s`;
+  }
+}, 1000);
+
+/* ---------- today / inbox ---------- */
+function renderToday(t) {
+  $('#todayDate').textContent = t.date || '';
+  nextEvent = t.next || null;
+  $('#nextChip').classList.toggle('hidden', !nextEvent);
+  if (nextEvent) $('#nextName').textContent = nextEvent.summary.slice(0, 28);
+  if (t.error && !t.events) { $('#today').innerHTML = `<div class="empty">Calendar: ${esc(t.error)}</div>`; return; }
+  if (!t.events?.length) { $('#today').innerHTML = '<div class="empty">Nothing on the calendar. Clear day.</div>'; return; }
+  $('#today').innerHTML = t.events.map(e => `<div class="ev ${e.past ? 'past' : ''} ${e.live ? 'live' : ''} ${nextEvent && e.id === nextEvent.id ? 'next' : ''}">
+    <div class="t">${hm(e.start)}<br><span style="opacity:.6">${hm(e.end)}</span></div>
+    <div><div class="s">${esc(e.summary)}</div>${e.location ? `<div class="m">${esc(e.location)}</div>` : ''}${e.attendees?.length ? `<div class="m">with ${esc(e.attendees.slice(0,3).join(', '))}</div>` : ''}</div></div>`).join('');
+}
+function renderInbox(i) {
+  if (i.error && !i.items) { $('#inbox').innerHTML = `<div class="empty">Mail: ${esc(i.error)}</div>`; return; }
+  $('#inboxMeta').textContent = i.unread ? `${i.unread} unread` : '';
+  $('#inboxChip').classList.toggle('hidden', !i.unread); $('#inboxN').textContent = i.unread; $('#inboxVip').textContent = i.vip ? `${i.vip} vip` : 'unread';
+  if (!i.items?.length) { $('#inbox').innerHTML = '<div class="empty">Inbox is quiet.</div>'; return; }
+  $('#inbox').innerHTML = i.items.map(m => `<a class="mail ${m.vip ? 'vip' : ''}" href="${esc(m.link)}" target="_blank"><div class="f"><span>${esc(m.from)}</span><small>${esc((m.date || '').replace(/^\w+,\s*/, '').slice(0, 12))}</small></div><div class="s">${esc(m.subject)}</div><div class="p">${esc(m.snippet)}</div></a>`).join('');
+}
+
+/* ---------- markets ---------- */
+const lastPx = {};
+function spark(vals, up) {
+  if (!vals?.length) return '';
+  const min = Math.min(...vals), max = Math.max(...vals), w = 120, h = 28;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 2 - ((v - min) / ((max - min) || 1)) * (h - 4)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${up ? '#4ade80' : '#ff5a5a'}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function renderMarkets(m) {
+  if (!m.quotes) { $('#markets').innerHTML = `<div class="empty">Markets: ${esc(m.error || 'unavailable')}</div>`; return; }
+  $('#mktAsof').textContent = m.asof ? hm24(m.asof) : '';
+  $('#markets').innerHTML = m.quotes.map(q => {
+    if (q.error) return `<div class="q"><div class="sym">${esc(q.symbol)}</div><div class="empty" style="grid-column:2/5">unavailable</div></div>`;
+    const up = (q.change_pct ?? 0) >= 0, fl = lastPx[q.symbol] !== undefined && lastPx[q.symbol] !== q.price; lastPx[q.symbol] = q.price;
+    const px = q.price >= 1000 ? q.price.toLocaleString([], {maximumFractionDigits: 0}) : q.price?.toFixed(2);
+    return `<div class="q"><div class="sym">${esc(q.symbol.replace('^', ''))}<small>${esc(q.name)}</small></div>${spark(q.spark, up)}<div class="px ${fl ? 'flash' : ''}">${px ?? '--'}</div><div class="chg ${up ? 'up' : 'down'}">${q.change_pct == null ? '' : (up ? '+' : '') + q.change_pct.toFixed(2) + '%'}</div></div>`;
+  }).join('');
+  const tape = m.quotes.filter(q => !q.error).map(q => `<span><i>${esc(q.symbol.replace('^', ''))}</i>${q.price >= 1000 ? q.price.toLocaleString([], {maximumFractionDigits: 0}) : q.price?.toFixed(2)} <span class="${(q.change_pct ?? 0) >= 0 ? 'up' : 'down'}" style="margin:0">${(q.change_pct ?? 0) >= 0 ? '▲' : '▼'} ${Math.abs(q.change_pct ?? 0).toFixed(2)}%</span></span>`).join('');
+  $('#tape').innerHTML = tape + tape;
+  setTimeout(() => document.querySelectorAll('.px.flash').forEach(e => e.classList.remove('flash')), 1200);
+}
+
+/* ---------- weather / news / tasks / now ---------- */
+function renderWeather(w) { if (!w.temp && w.error) { $('#wxd').textContent = 'unavailable'; return; } $('#wx b').textContent = `${w.temp}°`; $('#wxd').textContent = `${w.desc} · ${w.lo}–${w.hi}°${w.rain ? ' · ' + w.rain + '% rain' : ''} · ${w.place}`; }
+function renderNews(n) { $('#news').innerHTML = (n.items || []).map(i => `<a class="nw" href="${esc(i.link)}" target="_blank"><div class="h">${esc(i.title)}</div><div class="src">${esc(i.source)}</div></a>`).join('') || `<div class="empty">${esc(n.error || 'No headlines.')}</div>`; }
+function dueWords(h) { if (h < 0) return 'overdue'; if (h < 1) return '<1h'; if (h < 24) return `${Math.floor(h)}h`; return `${Math.floor(h / 24)}d ${Math.floor(h % 24)}h`; }
+function renderSchool(d) {
+  const items = d.items || [];
+  $('#dueN').textContent = d.ok ? (items.length ? `${items.filter(i => i.urgency !== 'later').length} this week` : '') : 'not linked';
+  $('#due').innerHTML = !d.ok ? `<div class="empty">${esc(d.error && d.error.includes('not set') ? 'log in to HuskyCT in the Jarvis Browser, then: jarvis school setup' : (d.error || 'unavailable'))}</div>`
+    : items.length ? items.slice(0, 7).map(i => `<div class="due ${i.urgency}"><span class="c">${esc(i.course)}</span><span class="s">${esc(i.title)}</span><span class="w">${dueWords(i.due_h)}</span></div>`).join('')
+    : '<div class="empty">Nothing due in the next two weeks.</div>';
+}
+function renderTasks(t) {
+  const list = t.tasks || []; $('#taskN').textContent = list.length ? `${list.length} open` : '';
+  $('#tasks').innerHTML = list.length ? list.map(x => `<label class="task"><input type="checkbox" data-id="${esc(x.id)}"><span>${esc(x.text)}</span>${x.due ? `<small>${esc(x.due)}</small>` : ''}</label>`).join('') : '<div class="empty">Nothing on the list.</div>';
+}
+$('#tasks').addEventListener('change', async e => { if (e.target.dataset.id) { await post(`/api/tasks/${e.target.dataset.id}/done`, {done: true}); loadTasks(); } });
+$('#addtask').addEventListener('submit', async e => { e.preventDefault(); const v = $('#taskText').value.trim(); if (!v) return; await post('/api/tasks', {text: v}); $('#taskText').value = ''; loadTasks(); });
+function renderNow(n) { $('#now').className = 'now ' + (n.state || 'idle'); $('#now .dot').className = 'dot ' + (n.state === 'busy' ? 'warn' : 'ok'); $('#nowText').textContent = n.state === 'busy' ? 'jarvis · ' + n.text : 'jarvis · standing by'; if (!voice.conv) $('#core').classList.toggle('busy', n.state === 'busy'); }
+
+/* ---------- ops drawer ---------- */
+const tierTag = r => r.kind === 'event' ? 'EV' : 'T' + r.tier;
+function renderFeed(items) { $('#feedCount').textContent = items.length ? `${items.length}` : ''; $('#feed').innerHTML = items.map(r => { const tag = tierTag(r), head = r.kind === 'event' ? esc(r.event_kind || 'event') : esc(r.tool); const body = r.kind === 'event' ? esc(r.detail || '') : esc(r.args_summary || ''); const dec = r.kind === 'event' ? '' : ` · ${esc(r.decision)}${r.approval ? ' · ' + esc(r.approval) : ''}`; return `<div class="row"><span class="t">${hm24(r.ts)}</span><span class="${tag}">${tag}</span><div><div class="tool">${head}${dec}</div><div class="args">${body}</div></div></div>`; }).join('') || '<div class="empty">No activity.</div>'; }
+function renderApprovals(a) { $('#apChip').classList.toggle('hidden', !a.pending.length); $('#pending').innerHTML = a.pending.length ? a.pending.map(r => `<div class="card"><div>${esc(r.tool)} <span class="lbl">wants to run</span></div><div class="meta">${esc(r.args_summary || '')}</div><div class="meta">${hm24(r.ts)} · ${esc(r.reason || '')}</div></div>`).join('') : '<div class="empty">Nothing waiting.</div>'; $('#decided').innerHTML = a.decided.slice(0, 6).map(r => `<div class="card decided"><div>${esc(r.tool)} · ${esc(r.approval || 'expired')}${r.approver ? ' · ' + esc(r.approver) : ''}</div><div class="meta">${hm24(r.ts)} · ${esc((r.args_summary || '').slice(0, 80))}</div></div>`).join(''); }
+function renderAudit(rows) { $('#audit tbody').innerHTML = rows.map(r => `<tr><td>${hm24(r.ts)}</td><td class="T${r.tier}">T${r.tier}</td><td>${esc(r.tool)}</td><td>${esc(r.decision)}${r.approval ? '/' + esc(r.approval) : ''}</td></tr>`).join(''); }
+function renderStatus(s) {
+  const sv = s.services, gw = sv.gateway;
+  $('#gwDot').className = 'dot ' + (gw.pid && gw.api_ok ? 'ok' : gw.pid ? 'warn' : 'bad');
+  $('#spendMini').textContent = '$' + (s.spend.usd || 0).toFixed(2) + ' / $' + (s.spend.cap || 0).toFixed(0);
+  const on = [sv.telegram, sv.google, sv.honcho, !!sv.phone, !!sv.funnel_url, sv.elevenlabs]; $('#sysN').textContent = `${on.filter(Boolean).length}/6`;
+  $('#qhChip').classList.toggle('hidden', !s.quiet_hours);
+  const t = (k, v, ok) => `<div><span class="dot ${ok ? 'ok' : 'bad'}"></span><b>${k}</b>${esc(v)}</div>`;
+  $('#tiles').innerHTML = [t('telegram', sv.telegram ? 'linked' : 'off', sv.telegram), t('google', sv.google ? 'gmail · cal · drive' : 'no token', sv.google), t('memory', sv.honcho ? 'honcho cloud' : 'local', sv.honcho), t('phone', sv.phone || 'none', !!sv.phone), t('funnel', sv.funnel_url ? 'public · https' : 'off', !!sv.funnel_url), t('voice', sv.elevenlabs ? 'elevenlabs' : 'off', sv.elevenlabs), t('bridge', sv.bridge.pid ? 'up' : 'down', !!sv.bridge.pid)].join('');
+  if (s.now) renderNow(s.now);
+}
+/* ---------- brief (on demand only) ---------- */
+const brief = $('#brief');
+function renderBrief(d) { $('#briefCols').innerHTML = (d.sections || []).map(sec => `<section><h2>${esc(sec.title)}</h2><ul>${sec.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></section>`).join(''); brief.classList.add('open'); }
+const openBrief = () => { $('#briefCols').innerHTML = '<div class="empty">assembling…</div>'; brief.classList.add('open'); j('/api/brief').then(renderBrief).catch(() => { $('#briefCols').innerHTML = '<div class="empty">brief unavailable</div>'; }); };
+$('#briefBtn').addEventListener('click', () => brief.classList.contains('open') ? brief.classList.remove('open') : openBrief());
+brief.addEventListener('click', e => { if (e.target === brief) brief.classList.remove('open'); });
+const ops = $('#ops'); $('#opsBtn').addEventListener('click', () => ops.classList.toggle('open'));
+// Space starts/stops a voice session only as a deliberate tap: a space that comes within 1.5 s of any other key is
+// typing that landed on the HUD by mistake (2026-10-30: that opened "Yes, Ben?" sessions mid-conversation).
+let lastOtherKey = 0;
+document.addEventListener('keydown', e => { if (e.code !== 'Space') lastOtherKey = Date.now(); }, true);
+document.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key === 'o' || e.key === 'O') ops.classList.toggle('open'); if (e.key === 'b' || e.key === 'B') { brief.classList.contains('open') ? brief.classList.remove('open') : openBrief(); } if (e.key === 'Escape') { ops.classList.remove('open'); brief.classList.remove('open'); } if (e.code === 'Space') { e.preventDefault(); if (e.repeat || Date.now() - lastOtherKey < 1500) return; voice.conv ? voice.stop() : voice.start(); } });
+
+/* ---------- loading ---------- */
+const loadTasks = () => j('/api/tasks').then(renderTasks).catch(() => {});
+async function loadAll() {
+  const [t, i, m, w, n, tk, s] = await Promise.all([j('/api/today'), j('/api/inbox'), j('/api/markets'), j('/api/weather'), j('/api/news'), j('/api/tasks'), j('/api/status')]);
+  renderToday(t); renderInbox(i); renderMarkets(m); renderWeather(w); renderNews(n); renderTasks(tk); renderStatus(s);
+  j('/api/school').then(renderSchool).catch(() => {});
+  Promise.all([j('/api/feed'), j('/api/approvals'), j('/api/audit?limit=60')]).then(([f, a, au]) => { renderFeed(f.items); renderApprovals(a); renderAudit(au.rows); });
+}
+setInterval(() => j('/api/markets').then(renderMarkets).catch(() => {}), 60000);
+setInterval(() => { j('/api/today').then(renderToday).catch(() => {}); j('/api/inbox').then(renderInbox).catch(() => {}); }, 120000);
+setInterval(() => { j('/api/weather').then(renderWeather).catch(() => {}); j('/api/news').then(renderNews).catch(() => {}); }, 600000);
+setInterval(loadTasks, 30000);
+setInterval(() => j('/api/school').then(renderSchool).catch(() => {}), 600000);
+function connect() {
+  const es = new EventSource('/api/stream');
+  es.addEventListener('feed', e => { const d = JSON.parse(e.data); renderFeed(d.items); renderApprovals(d.approvals); j('/api/audit?limit=60').then(au => renderAudit(au.rows)); loadTasks(); });
+  es.addEventListener('status', e => renderStatus(JSON.parse(e.data)));
+  es.addEventListener('now', e => renderNow(JSON.parse(e.data)));
+  es.addEventListener('wake', () => { if (!voice.conv && !call.active) voice.start('Sir?'); });
+  es.addEventListener('call', e => { const d = JSON.parse(e.data); if (d.state === 'start') call.start(); else if (d.state === 'line') call.line(d.role, d.text); else if (d.state === 'end') call.end(); });
+  es.addEventListener('brief', e => renderBrief(JSON.parse(e.data)));
+  es.onerror = () => { es.close(); setTimeout(connect, 3000); };
+}
+
+/* ---------- parallax ---------- */
+document.addEventListener('mousemove', e => { const x = (e.clientX / innerWidth - .5), y = (e.clientY / innerHeight - .5); document.querySelectorAll('main .panel').forEach((p, i) => { const k = 2 + (i % 3); p.style.setProperty('--px', (-x * k).toFixed(1) + 'px'); p.style.setProperty('--py', (-y * k).toFixed(1) + 'px'); }); });
+
+/* ---------- reactor bars ---------- */
+const N = 48, bars = $('#bars');
+for (let i = 0; i < N; i++) { const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect'); r.setAttribute('x', 134); r.setAttribute('y', 50); r.setAttribute('width', 2); r.setAttribute('height', 5); r.setAttribute('rx', 1); r.setAttribute('transform', `rotate(${(360 / N) * i} 135 135)`); bars.appendChild(r); }
+const t0 = performance.now();
+(function animateBars() {
+  const rects = bars.children, now = performance.now(); let data = null;
+  try { data = voice.conv && voice.mode === 'speaking' ? voice.conv.getOutputByteFrequencyData() : voice.conv ? voice.conv.getInputByteFrequencyData() : null; } catch { data = null; }
+  for (let i = 0; i < N; i++) { let h; if (data && data.length) { const idx = Math.floor(i / N * Math.min(data.length, 96)); h = 5 + (data[idx] / 255) * 28; } else h = 5 + 3 * (0.5 + 0.5 * Math.sin((now - t0) / 900 + i * 0.35)); rects[i].setAttribute('height', h.toFixed(1)); rects[i].setAttribute('y', (55 - h).toFixed(1)); }
+  requestAnimationFrame(animateBars);
+})();
+
+/* ---------- voice ---------- */
+/* ---------- phone-call mirror: the phone listens; the Mac only shows ---------- */
+const call = {
+  active: false, _t: null,
+  start() { this.active = true; document.body.classList.add('oncall'); $('#transcript').innerHTML = ''; voice.setMode('listening', 'on the phone'); $('#caption').textContent = 'the phone is listening'; },
+  line(role, text) {
+    if (!this.active) this.start();
+    const el = document.createElement('div'); el.className = role === 'user' ? 'you' : 'ai'; el.innerHTML = `<b>${role === 'user' ? 'YOU' : 'JARVIS'}</b>${esc(text)}`;
+    const tr = $('#transcript'); tr.appendChild(el); while (tr.children.length > 6) tr.removeChild(tr.firstChild);
+    voice.caption(role === 'user' ? 'user' : 'ai', text);
+    clearTimeout(this._t);
+    if (role === 'user') { voice.setMode('thinking', 'on the phone · thinking'); }
+    else { voice.setMode('speaking', 'on the phone · jarvis'); this._t = setTimeout(() => this.active && voice.setMode('listening', 'on the phone'), Math.min(12000, 1200 + text.length * 55)); }
+  },
+  end() { this.active = false; clearTimeout(this._t); document.body.classList.remove('oncall'); voice.setMode('idle', 'standby'); $('#caption').textContent = 'call ended'; setTimeout(() => { if (!this.active && !voice.conv) $('#caption').textContent = ''; }, 8000); }
+};
+const voice = {
+  conv: null, mode: 'idle',
+  setMode(m, text) { this.mode = m; $('#core').className = 'core ' + m; $('#mode').textContent = text || m; },
+  caption(who, msg) { $('#caption').innerHTML = (who === 'user' ? `<span class="you">you · </span>` : '') + esc(msg); },
+  async start(opening) {
+    if (this.conv) return;
+    if (call.active) { $('#caption').textContent = 'on the phone: the call is listening, not the Mac'; return; }
+    if (!window.ElevenLabsClient) { this.setMode('idle', 'voice sdk not loaded'); return; }
+    this.setMode('connecting', 'connecting'); $('#caption').textContent = '';
+    try {
+      // WebRTC first (prompt end-of-turn in browsers); signed-URL websocket only as a fallback.
+      let session;
+      const rt = await fetch('/api/voice/token'); const dt = await rt.json();
+      if (rt.ok && dt.token) session = {conversationToken: dt.token, connectionType: 'webrtc'};
+      else {
+        const r = await fetch('/api/voice/signed-url'); const d = await r.json();
+        if (!r.ok) { this.setMode('idle', 'standby'); $('#caption').textContent = d.detail || 'voice unavailable'; return; }
+        session = {signedUrl: d.signed_url, connectionType: 'websocket'};
+      }
+      this.conv = await ElevenLabsClient.Conversation.startSession({
+        ...session,
+        // Opening line as a dynamic variable: ElevenLabs rejects the firstMessage override on WebRTC sessions.
+        dynamicVariables: {opening: opening || 'Yes, Ben?', call_type: 'inbound'},
+        onConnect: () => {
+          this.setMode('listening', 'listening'); this.setActive(true); this._spoke = false; this._peakIn = 0;
+          const t0 = Date.now(); let lastSound = t0; this._vad = 0; window.__voice = {events: [], levels: [], vad: [], t0};
+          // Close a session nobody talks to (false wake-word trigger) so it doesn't burn ElevenLabs minutes, but count
+          // SILENCE, not time since connect: ElevenLabs only transcribes and answers once a turn ends, and a long request
+          // takes longer than any fixed timer. Mic level comes from the SDK's own input node, so sound means Ben is
+          // talking (the quiet clock restarts); 12 s of real quiet with no words closes it; 60 s of noise with no words
+          // (TV, room chatter) closes it too.
+          clearInterval(this._lvl); this._lvl = setInterval(() => {
+            if (!this.conv) { clearInterval(this._lvl); return; }
+            let v = 0; try { v = this.conv.getInputVolume(); } catch {}
+            const now = Date.now(); this._peakIn = Math.max(this._peakIn, v); window.__voice.levels.push(+v.toFixed(3));
+            // Speech = ElevenLabs's own VAD (onVadScore, gain-independent) or a clearly non-silent mic level.
+            if (v > 0.015 || this._vad > 0.5) lastSound = now;
+            if (this._spoke) return;
+            $('#mode').textContent = (v < 0.005 && this._vad < 0.3) ? 'listening · mic quiet' : 'listening · mic ' + '▁▂▃▄▅▆▇█'[Math.min(7, Math.floor(Math.max(v * 16, this._vad * 7)))];
+            if (now - lastSound > 12000) { $('#caption').textContent = this._peakIn < 0.02 ? 'mic silent: Chrome got no audio, closing' : 'nothing heard, closing'; this.stop(); }
+            else if (now - t0 > 60000) { $('#caption').textContent = 'sound but no words for a minute, closing'; this.stop(); }
+          }, 250);
+        },
+        onVadScore: ({vadScore}) => { this._vad = vadScore || 0; if (window.__voice) window.__voice.vad.push([Date.now() - window.__voice.t0, +this._vad.toFixed(2)]); },
+        onDisconnect: () => { this.conv = null; this.setMode('idle', 'standby'); this.setActive(false); },
+        onModeChange: ({mode}) => this.setMode(mode === 'speaking' ? 'speaking' : 'listening', mode === 'speaking' ? 'jarvis' : 'listening'),
+        onMessage: ({source, message}) => { if (window.__voice) window.__voice.events.push([Date.now() - window.__voice.t0, source, message]); if (source === 'user' && (message || '').trim()) this._spoke = true; this.caption(source === 'user' ? 'user' : 'ai', message); },
+        onError: (e) => { console.error(e); if (window.__voice) window.__voice.events.push([Date.now() - window.__voice.t0, 'error', String(e?.message || e)]); $('#caption').textContent = 'voice error: ' + (e?.message || e); },
+      });
+    } catch (e) { console.error(e); this.conv = null; this.setMode('idle', 'standby'); $('#caption').textContent = 'could not start voice: ' + (e?.message || e); }
+  },
+  async stop() { if (!this.conv) return; clearInterval(this._lvl); try { await this.conv.endSession(); } catch {} this.conv = null; this.setMode('idle', 'standby'); this.setActive(false); },
+  /* The wake-word listener pauses while this flag is true. Re-assert it every 20 s and clear it the moment the
+     session is gone, so a page that lost its disconnect callback can never mute "Hey Jarvis" for long. */
+  setActive(on) {
+    post('/api/voice/active', {active: on, source: 'hud'}).catch(() => {});
+    clearInterval(this._hb); this._hb = null;
+    if (on) this._hb = setInterval(() => {
+      const st = this.conv && this.conv.getStatus ? this.conv.getStatus() : (this.conv ? 'connected' : 'disconnected');
+      if (!this.conv || st === 'disconnected' || st === 'disconnecting') { this.conv = null; this.setMode('idle', 'standby'); this.setActive(false); return; }
+      post('/api/voice/active', {active: true, source: 'hud'}).catch(() => {});
+    }, 20000);
+  }
+};
+$('#core').addEventListener('click', () => voice.conv ? voice.stop() : voice.start());
+window.addEventListener('pagehide', () => { if (voice.conv || voice._hb) { try { navigator.sendBeacon('/api/voice/active', new Blob([JSON.stringify({active: false, source: 'hud-closed'})], {type: 'application/json'})); } catch {} } });
+
+/* ---------- boot ---------- */
+(async () => {
+  const boot = $('#boot'), params = new URLSearchParams(location.search);
+  try { await loadAll(); if (params.get('nostream') !== '1') connect(); $('#bootmsg').textContent = 'systems online'; }
+  catch (e) { console.error(e); $('#bootmsg').textContent = 'api unreachable'; }
+  if (params.get('noboot') === '1') boot.remove(); else setTimeout(() => boot.classList.add('done'), 900);
+  if (params.get('call') === '1') { history.replaceState(null, '', '/'); }
+  j('/api/call').then(d => { if (d.active) { call.start(); (d.lines || []).forEach(l => call.line(l.role, l.text)); } }).catch(() => {});
+  if (params.get('brief') === '1') { setTimeout(openBrief, 300); history.replaceState(null, '', '/'); }
+  if (params.get('wake') === '1') { const tryStart = () => window.ElevenLabsClient ? voice.start('Sir?') : setTimeout(tryStart, 200); setTimeout(tryStart, 800); history.replaceState(null, '', '/'); }
+})();
+</script>
+</body>
+</html>
